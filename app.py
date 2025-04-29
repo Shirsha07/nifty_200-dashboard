@@ -58,16 +58,35 @@ from plotly.subplots import make_subplots
 import datetime
 import time
 
-# --- Function to fetch Nifty 200 stock list ---
-@st.cache_data(ttl=600)  # Cache for 10 minutes (600 seconds)
-def get_nifty200_stocks():
-    nifty200_url = "https://www.nseindia.com/content/indices/ind_nifty200list.csv"
-    try:
-        df = pd.read_csv(nifty200_url)
-        return sorted(df['Symbol'].tolist())
-    except Exception as e:
-        st.error(f"Error fetching Nifty 200 list: {e}")
-        return []
+# --- Nifty 200 stock list ---
+NIFTY_200_STOCKS = [
+    "ADANIENT", "ADANIPORTS", "APOLLOHOSP", "ASIANPAINT", "AUBANK", "AUROPHARMA", "AXISBANK", "BAJAJ-AUTO",
+    "BAJFINANCE", "BAJAJFINSV", "BHARTIARTL", "BPCL", "BRITANNIA", "CIPLA", "COALINDIA", "DIVISLAB",
+    "DLF", "DABUR", "EICHERMOT", "GAIL", "GRASIM", "HCLTECH", "HDFC", "HDFCBANK", "HDFCLIFE",
+    "HEROMOTOCO", "HINDALCO", "HINDUNILVR", "ICICIBANK", "INFY", "INDUSINDBK", "ITC", "JSWSTEEL",
+    "KOTAKBANK", "LTIM", "LT", "M&M", "MARUTI", "NTPC", "ONGC", "POWERGRID", "RELIANCE", "SBIN",
+    "SHREECEM", "SUNPHARMA", "TCS", "TECHM", "TITAN", "ULTRACEMCO", "UPL", "WIPRO", "ADANIGREEN",
+    "ADANITRANS", "ALKEM", "AMBUJACEM", "APOLLOTYRE", "ARVIND", "ASHOKLEY", "BALKRISIND", "BANKBARODA",
+    "BEL", "BHARATFORG", "BHEL", "BIOCON", "BOSCHLTD", "CANBK", "CHOLAFIN", "CONCOR", "CUMMINSIND",
+    "FEDERALBNK", "GLAND", "HAVELLS", "HCLTECH", "HDFC", "HDFCAMC", "HEC", "ICICIACCI", "ICICIGI",
+    "ICICIPRULI", "IGL", "INDIAMART", "INDIANHOTEL", "IEX", "IRCTC", "JUBLFOOD", "LALPATHLAB", "LIC Housing Finance",
+    "LUPIN", "M&MFIN", "MOTHERSUMI", "MRF", "MUTHOOLFIN", "NAVINFLOUR", "OBEROIRLTY", "PAGEIND", "PEL",
+    "PIIND", "PNB", "POLYCAB", "SBICARD", "SIEMENS", "SRF", "SRTRANSFIN", "STARHEALTH", "TATACONSUM",
+    "TATAMOTORS", "TATASTEEL", "TVSMOTOR", "ACC", "AMARAJABAT", "BAJAJELEC", "BANDHANBNK", "BANKINDIA",
+    "BASF", "BBTC", "BERGEPAINT", "BLUEDART", "CENTRALBK", "CGPOWER", "COROMANDEL", "CROMPTON",
+    "DELTACORP", "DHANUKA", "DISHTV", "EIHOTEL", "EMAMILTD", "ESCORTS", "EXIDEIND", "FORTIS", "FRETAIL",
+    "GDL", "GESC", "GNFC", "GODREJAGRO", "GODREJCP", "GPPL", "GSPL", "GUJGASLTD", "HEIDELBERG", "HFCL",
+    "HIKAL", "HINDPETRO", "HUDCO", "IBULHSGFIN", "IDBI", "IDFC", "IOLCP", "IPCALAB", "JBCHEPHARM", "JKCEMENT",
+    "JKLAKSHMI", "JMCPROJECTS", "JSL", "JUSTDIAL", "KAJARIACER", "KALPATPOWR", "KANSAINER", "KARURVYSYA", "KEI",
+    "KIOCL", "KPRMILL", "KRBL", "KSCL", "L&TFH", "LAURUSLABS", "LTTS", "MANAPPURAM", "MASTEK", "MAXHEALTH",
+    "MCX", "METROPOLIS", "MGL", "MINDACORP", "MINDTREE", "MMTC", "MPL", "MRPL", "NCC", "NESTLEIND", "NETWORK18",
+    "NHPC", "NIACL", "NMDC", "NRBBEARING", "ORIENTBANK", "ORIENTCEM", "PAYTM", "PFC", "PGHH", "PHOENIXLTD", "PRESTIGE",
+    "PRINCEPIPE", "QUESS", "RAIN", "RALLIS", "RAMCOCEM", "RATNAMANI", "RBLBANK", "RECLTD", "RELIANCE", "SAIL", "SANOFI",
+    "SJVN", "SOUTHBANK", "SPARC", "SUMICHEM", "SUNDARMFIN", "SUNTV", "SYNGENE", "TATACHEM", "TATAMTRDVR", "TBZ",
+    "THERMAX", "THOMASCOOK", "TIINDIA", "TIMKEN", "TORNTPOWER", "TRENT", "TRITURBINE", "TTKPRESTIG", "UNIONBANK", "VAIBHAVGBL",
+    "VAKILAND", "VEDL", "VENKEYS", "WELCORP", "WHIRLPOOL", "ZEEL"
+]
+
 
 # --- Function to fetch historical data ---
 @st.cache_data(ttl=600)  # Cache for 10 minutes
@@ -106,12 +125,9 @@ def identify_upward_trend(df):
 # --- Main Streamlit application ---
 st.title("Interactive Nifty 200 Dashboard")
 
-nifty200_stocks = get_nifty200_stocks()
-if not nifty200_stocks:
-    st.error("Failed to fetch Nifty 200 stocks. Please check your internet connection and try again.")
-    st.stop()
 
-selected_stock = st.sidebar.selectbox("Select Stock", nifty200_stocks)
+
+selected_stock = st.sidebar.selectbox("Select Stock", NIFTY_200_STOCKS)
 timeframe = st.sidebar.selectbox("Select Timeframe", ["1mo", "3mo", "6mo", "1y", "2y", "5y", "max"], index=3)
 interval = st.sidebar.selectbox("Select Interval", ["1d", "1wk", "1mo"], index=0)
 
@@ -120,14 +136,14 @@ today = datetime.date.today()
 today_str = today.strftime("%Y-%m-%d")
 nifty200_latest_data = {}
 progress_bar = st.progress(0)
-for i, stock in enumerate(nifty200_stocks):
+for i, stock in enumerate(NIFTY_200_STOCKS):
     try:
         data = yf.download(stock + ".NS", start=today_str, end=today_str, interval="5m", progress=False) # Changed to 5m interval
         if not data.empty:
             nifty200_latest_data[stock] = data
     except Exception as e:
         print(f"Error fetching data for {stock}: {e}")
-    progress_bar.progress((i + 1) / len(nifty200_stocks))
+    progress_bar.progress((i + 1) / len(NIFTY_200_STOCKS))
 
 latest_prices_df = pd.DataFrame()
 for stock, data in nifty200_latest_data.items():
@@ -167,9 +183,9 @@ st.dataframe(losers_df)
 st.subheader("Stocks in Strong Upward Trend (Recent)")
 trending_stocks = []
 # Fetch historical data for trend analysis (adjust period as needed)
-historical_data_trend = yf.download([stock + ".NS" for stock in nifty200_stocks], period="1mo", interval="1d", progress=False)
+historical_data_trend = yf.download([stock + ".NS" for stock in NIFTY_200_STOCKS], period="1mo", interval="1d", progress=False)
 if isinstance(historical_data_trend, pd.DataFrame):
-    for stock in nifty200_stocks:
+    for stock in NIFTY_200_STOCKS:
         if stock in historical_data_trend.columns.levels[1]:
             stock_data = historical_data_trend['Close'][stock].dropna()
             if identify_upward_trend(stock_data.to_frame()):
@@ -236,3 +252,4 @@ if selected_stock:
         st.plotly_chart(fig_indicators, use_container_width=True)
     else:
         st.warning(f"Could not fetch data for {selected_stock} with the selected timeframe and interval.")
+
