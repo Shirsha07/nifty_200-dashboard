@@ -1,6 +1,7 @@
 import subprocess
 import sys
 import os
+import time  # Import the time module
 
 # --- Check if streamlit is installed, if not, install it ---
 def install_streamlit():
@@ -87,16 +88,23 @@ NIFTY_200_STOCKS = [
     "VAKILAND", "VEDL", "VENKEYS", "WELCORP", "WHIRLPOOL", "ZEEL"
 ]
 
-
 # --- Function to fetch historical data ---
 @st.cache_data(ttl=600)  # Cache for 10 minutes
-def fetch_stock_data(symbol, period, interval):
-    try:
-        data = yf.download(symbol + ".NS", period=period, interval=interval)
-        return data
-    except Exception as e:
-        st.error(f"Error fetching data for {symbol}: {e}")
-        return pd.DataFrame()
+def fetch_stock_data(symbol, period, interval, retries=3, delay=5):  # Added retries and delay
+    for attempt in range(retries):
+        try:
+            data = yf.download(symbol + ".NS", period=period, interval=interval)
+            if data.empty:
+                st.warning(f"No data found for {symbol} on attempt {attempt + 1}.")
+                return pd.DataFrame()
+            return data
+        except Exception as e:
+            error_message = str(e)  # Get the error message
+            st.error(f"Error fetching data for {symbol} on attempt {attempt + 1}: {error_message}")
+            if attempt < retries - 1:  # Only wait if there are more retries
+                time.sleep(delay)  # Wait before retrying
+            else:
+                return pd.DataFrame()  # Return empty DataFrame after all retries fail
 
 # --- Function to calculate top gainers and losers ---
 def get_top_gainers_losers(df):
