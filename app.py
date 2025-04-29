@@ -12,8 +12,27 @@ def install_streamlit():
         print("Streamlit is not installed. Installing...")
         try:
             # Ensure pip is installed and in the PATH.  Use sys.executable to get the correct pip.
-            subprocess.check_call([sys.executable, '-m', 'ensurepip', '--upgrade'])
-            subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'streamlit', '--upgrade'])
+            process = subprocess.Popen(
+                [sys.executable, '-m', 'ensurepip', '--upgrade'],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            stdout, stderr = process.communicate()
+            if process.returncode != 0:
+                print(f"Error running ensurepip: {stderr.decode()}")
+                sys.exit(1)
+
+            process = subprocess.Popen(
+                [sys.executable, '-m', 'pip', 'install', 'streamlit', '--upgrade'],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            stdout, stderr = process.communicate()
+            if process.returncode != 0:
+                print(f"Error installing Streamlit: {stderr.decode()}")
+                print(f"Command output: {stdout.decode()} {stderr.decode()}")  # Print both stdout and stderr
+                sys.exit(1)
+            import streamlit  # Import after successful installation
             print("Streamlit has been successfully installed.")
             return
         except subprocess.CalledProcessError as e:
@@ -30,7 +49,7 @@ def install_streamlit():
 
 install_streamlit()  # Ensure Streamlit is installed
 
-import streamlit as st # Import at the top level, outside the function.
+import streamlit as st  # Import at the top level, outside the function.
 import yfinance as yf
 import pandas as pd
 import ta
