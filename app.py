@@ -5,7 +5,7 @@ import os
 # --- Check if streamlit is installed, if not, install it ---
 def install_streamlit():
     try:
-        import streamlit as st
+        import streamlit
         print("Streamlit is already installed.")
         return  # Exit the function if already installed
     except ModuleNotFoundError:
@@ -14,7 +14,6 @@ def install_streamlit():
             # Ensure pip is installed and in the PATH.  Use sys.executable to get the correct pip.
             subprocess.check_call([sys.executable, '-m', 'ensurepip', '--upgrade'])
             subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'streamlit', '--upgrade'])
-            import streamlit as st  # Import after successful installation
             print("Streamlit has been successfully installed.")
             return
         except subprocess.CalledProcessError as e:
@@ -31,6 +30,7 @@ def install_streamlit():
 
 install_streamlit()  # Ensure Streamlit is installed
 
+import streamlit as st # Import at the top level, outside the function.
 import yfinance as yf
 import pandas as pd
 import ta
