@@ -2,6 +2,14 @@ import subprocess
 import sys
 import os
 import time  # Import the time module
+import datetime
+import streamlit as st  # Import at the top level, outside the function.
+import yfinance as yf
+import pandas as pd
+import ta
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
 
 # --- Check if streamlit is installed, if not, install it ---
 def install_streamlit():
@@ -48,16 +56,9 @@ def install_streamlit():
             print(f"An unexpected error occurred during installation: {e}")
             sys.exit(1)
 
+
 install_streamlit()  # Ensure Streamlit is installed
 
-import streamlit as st  # Import at the top level, outside the function.
-import yfinance as yf
-import pandas as pd
-import ta
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import datetime
-import time
 
 # --- Nifty 200 stock list ---
 NIFTY_200_STOCKS = [
@@ -106,14 +107,18 @@ def fetch_stock_data(symbol, period, interval, retries=3, delay=5):  # Added ret
             else:
                 return pd.DataFrame()  # Return empty DataFrame after all retries fail
 
+
+
 # --- Function to calculate top gainers and losers ---
 def get_top_gainers_losers(df):
     if not df.empty:
         df['Change'] = df['Close'].pct_change() * 100
         gainers = df.nlargest(5, 'Change')
         losers = df.nsmallest(5, 'Change')
-        return gainers[['Close', 'Change']].rename(columns={'Close': 'Price'}), losers[['Close', 'Change']].rename(columns={'Close': 'Price'})
+        return gainers[['Close', 'Change']].rename(columns={'Close': 'Price'}), losers[['Close', 'Change']].rename(
+            columns={'Close': 'Price'})
     return pd.DataFrame(), pd.DataFrame()
+
 
 # --- Function to identify stocks in a strong upward trend (simple heuristic) ---
 def identify_upward_trend(df):
@@ -130,68 +135,97 @@ def identify_upward_trend(df):
         return True
     return False
 
+
 # --- Main Streamlit application ---
 st.title("Interactive Nifty 200 Dashboard")
 
-
-
 selected_stock = st.sidebar.selectbox("Select Stock", NIFTY_200_STOCKS)
 timeframe = st.sidebar.selectbox("Select Timeframe", ["1mo", "3mo", "6mo", "1y", "2y", "5y", "max"], index=3)
-interval = st.sidebar.selectbox("Select Interval", ["1d", "1wk", "1mo"], index=0)
-
-# Fetch data for all Nifty 200 stocks for current day to calculate gainers/losers
+interval = "1d"  # Hardcoded interval to be 1d
 today = datetime.date.today()
 today_str = today.strftime("%Y-%m-%d")
-nifty200_latest_data = {}
-progress_bar = st.progress(0)
-for i, stock in enumerate(NIFTY_200_STOCKS):
-    try:
-        data = yf.download(stock + ".NS", start=today_str, end=today_str, interval="5m", progress=False) # Changed to 5m interval
-        if not data.empty:
-            nifty200_latest_data[stock] = data
-    except Exception as e:
-        print(f"Error fetching data for {stock}: {e}")
-    progress_bar.progress((i + 1) / len(NIFTY_200_STOCKS))
-
-latest_prices_df = pd.DataFrame()
-for stock, data in nifty200_latest_data.items():
-    if not data.empty:
-        latest_prices_df.loc[stock, 'Close'] = data['Close'].iloc[-1]
-
-# Calculate and display top 5 gainers and losers
-st.subheader("Top 5 Gainers (Intraday)")
 gainers_df = pd.DataFrame(columns=['Price', 'Change (%)'])
 losers_df = pd.DataFrame(columns=['Price', 'Change (%)'])
 
-if nifty200_latest_data:
-    latest_prices = {stock: data['Close'].iloc[-1] for stock, data in nifty200_latest_data.items() if not data.empty}
-    if len(nifty200_latest_data) > 1: #Need atleast 2 data points.
-        previous_prices = {stock: data['Close'].iloc[-2] for stock, data in nifty200_latest_data.items() if not data.empty and len(data['Close']) > 1}
-        if latest_prices and previous_prices:
-            changes = {stock: ((latest_prices[stock] - previous_prices[stock]) / previous_prices[stock]) * 100 for stock in latest_prices if stock in previous_prices}
+# Fetch data for all Nifty 200 stocks for calculating gainers/losers
+st.subheader("Top 5 Gainers (Daily)")
+st.subheader("Top 5 Losers (Daily)")
+nifty200_data = {}
+progress_bar = st.progress(0)
+for i, stock in enumerate(NIFTY_200_STOCKS):
+    for attempt in range(3):  # Retry 3 times
+        try:
+
+            data = yf.download(stock + ".NS", start=today_str, end=today_str, interval="1d",
+                                   progress=False)  # Fetch daily data
+            if data is not None and not data.empty:
+                nifty200_data[stock] = data
+                break  # If successful, break the retry loop
+            else:
+                print(f"No data found for {stock} on {today_str} attempt {attempt + 1}")
+                time.sleep(5)  # Wait 5 seconds before retrying
+        except Exception as e:
+            print(f"Error fetching data for {stock} attempt {attempt + 1}: {e}")
+            time.sleep(5)  # Wait before retry
+    progress_bar.progress((i + 1) / len(NIFTY_200_STOCKS))
+
+# Calculate and display top 5 gainers and losers
+if nifty200_data:
+    latest_prices = {}
+    for stock, data in nifty200_data.items():
+        if not data.empty:
+            try:
+                latest_prices[stock] = data['Close'].iloc[-1]
+            except IndexError:
+                print(f"IndexError: No close price found for {stock} on {today_str}")
+                latest_prices[stock] = None  # Set to None if no close price
+
+    valid_prices = {stock: price for stock, price in latest_prices.items() if price is not None}
+
+    if len(valid_prices) > 1:  # Need at least two stocks to calculate change
+        previous_prices = {}
+        for stock, data in nifty200_data.items():
+            if not data.empty and len(data) > 1:
+                try:
+                    previous_prices[stock] = data['Close'].iloc[-2]
+                except IndexError:
+                    print(f"IndexError: No previous close price found for {stock} on {today_str}")
+                    previous_prices[stock] = None
+        valid_previous_prices = {stock: price for stock, price in previous_prices.items() if
+                                 price is not None}  #  Create a dict with valid previous prices
+
+        # Calculate changes only for stocks with both latest and previous prices
+        common_stocks = set(valid_prices.keys()) & set(valid_previous_prices.keys())
+        if common_stocks:
+            changes = {
+                stock: ((valid_prices[stock] - valid_previous_prices[stock]) / valid_previous_prices[stock]) * 100
+                for stock in common_stocks
+            }
+
             sorted_changes = sorted(changes.items(), key=lambda item: item[1], reverse=True)
             top_gainers = sorted_changes[:5]
             top_losers = sorted(changes.items(), key=lambda item: item[1])[:5]
-            for stock, change in top_gainers:
-                gainers_df.loc[stock] = [latest_prices[stock],  f"{change:.2f}"]
-            for stock, change in top_losers:
-                losers_df.loc[stock] = [latest_prices[stock], f"{change:.2f}"]
-        else:
-             st.warning("Insufficient data to calculate gainers/losers.  May need to wait for more market data.")
-    else:
-        st.warning("Insufficient data to calculate gainers/losers.  May need to wait for more market data.")
 
+            for stock, change in top_gainers:
+                gainers_df.loc[stock] = [valid_prices[stock], f"{change:.2f}"]
+            for stock, change in top_losers:
+                losers_df.loc[stock] = [valid_prices[stock], f"{change:.2f}"]
+        else:
+            st.warning("Not enough data to calculate gainers/losers.")
+    else:
+        st.warning("Not enough stocks with valid prices to calculate gainers/losers.")
 else:
-    st.warning("Could not fetch Nifty 200 latest data.")
+    st.warning("Could not fetch Nifty 200 daily data.")
+
 st.dataframe(gainers_df)
-st.subheader("Top 5 Losers (Intraday)")
 st.dataframe(losers_df)
 
 # Identify and display stocks in a strong upward trend
 st.subheader("Stocks in Strong Upward Trend (Recent)")
 trending_stocks = []
 # Fetch historical data for trend analysis (adjust period as needed)
-historical_data_trend = yf.download([stock + ".NS" for stock in NIFTY_200_STOCKS], period="1mo", interval="1d", progress=False)
+historical_data_trend = yf.download([stock + ".NS" for stock in NIFTY_200_STOCKS], period="1mo",
+                                       interval="1d", progress=False)
 if isinstance(historical_data_trend, pd.DataFrame):
     for stock in NIFTY_200_STOCKS:
         if stock in historical_data_trend.columns.levels[1]:
@@ -224,10 +258,10 @@ if selected_stock:
         # Candlestick Chart
         st.subheader(f"{selected_stock} - Candlestick Chart ({timeframe}, {interval})")
         fig_candlestick = go.Figure(data=[go.Candlestick(x=stock_data.index,
-                                                     open=stock_data['Open'],
-                                                     high=stock_data['High'],
-                                                     low=stock_data['Low'],
-                                                     close=stock_data['Close'])])
+                                                             open=stock_data['Open'],
+                                                             high=stock_data['High'],
+                                                             low=stock_data['Low'],
+                                                             close=stock_data['Close'])])
         st.plotly_chart(fig_candlestick, use_container_width=True)
 
         # Technical Indicators
@@ -237,21 +271,21 @@ if selected_stock:
         stock_data.dropna(inplace=True)
 
         fig_indicators = make_subplots(rows=2, cols=1, shared_xaxes=True,
-                                       vertical_spacing=0.1,
-                                       row_heights=[0.7, 0.3])
+                                               vertical_spacing=0.1,
+                                               row_heights=[0.7, 0.3])
 
         fig_indicators.add_trace(go.Candlestick(x=stock_data.index,
-                                                open=stock_data['Open'],
-                                                high=stock_data['High'],
-                                                low=stock_data['Low'],
-                                                close=stock_data['Close'],
-                                                name='Candlestick'), row=1, col=1)
+                                                        open=stock_data['Open'],
+                                                        high=stock_data['High'],
+                                                        low=stock_data['Low'],
+                                                        close=stock_data['Close'],
+                                                        name='Candlestick'), row=1, col=1)
 
         fig_indicators.add_trace(go.Scatter(x=stock_data.index, y=stock_data['SMA_20'],
-                                             line=dict(color='blue'), name='SMA 20'), row=1, col=1)
+                                                 line=dict(color='blue'), name='SMA 20'), row=1, col=1)
 
         fig_indicators.add_trace(go.Scatter(x=stock_data.index, y=stock_data['RSI'],
-                                             line=dict(color='purple'), name='RSI'), row=2, col=1)
+                                                 line=dict(color='purple'), name='RSI'), row=2, col=1)
 
         fig_indicators.add_hline(y=70, line=dict(color='red', dash='dash'), row=2, col=1)
         fig_indicators.add_hline(y=30, line=dict(color='green', dash='dash'), row=2, col=1)
@@ -260,4 +294,3 @@ if selected_stock:
         st.plotly_chart(fig_indicators, use_container_width=True)
     else:
         st.warning(f"Could not fetch data for {selected_stock} with the selected timeframe and interval.")
-
